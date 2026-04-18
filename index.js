@@ -223,24 +223,26 @@ client.on('interactionCreate', async interaction => {
     if (sub === 'host') {
       if (!interaction.member.roles.cache.has(LEAGUE_HOST_ROLE_ID)) {
         return interaction.reply({
-          content: 'You do not have the required role to host leagues.',
+          content:   'You do not have the required role to host leagues.',
           ephemeral: true,
         });
       }
 
       if (interaction.channelId !== LEAGUE_CHANNEL_ID) {
         return interaction.reply({
-          content: `Leagues must be hosted in <#${LEAGUE_CHANNEL_ID}>.`,
+          content:   `Leagues must be hosted in <#${LEAGUE_CHANNEL_ID}>.`,
           ephemeral: true,
         });
       }
 
-      const format = interaction.options.getString('format');
-      const type   = interaction.options.getString('type');
-      const perks  = interaction.options.getString('perks');
-      const region = interaction.options.getString('region');
+      // Defer immediately so Discord doesn't time out while we create the thread
+      await interaction.deferReply();
 
-      const leagueId  = generateLeagueId();
+      const format     = interaction.options.getString('format');
+      const type       = interaction.options.getString('type');
+      const perks      = interaction.options.getString('perks');
+      const region     = interaction.options.getString('region');
+      const leagueId   = generateLeagueId();
       const maxPlayers = getMaxPlayers(format);
 
       const league = {
@@ -262,22 +264,22 @@ client.on('interactionCreate', async interaction => {
       db.leagues[leagueId] = league;
       saveDB(db);
 
+      // Post the public league embed
       const embed = buildLeagueEmbed(league, interaction.guild);
-
-      const msg = await interaction.reply({
-        content:    `<@&${LEAGUES_PING_ROLE_ID}>`,
-        embeds:     [embed],
-        fetchReply: true,
+      const msg   = await interaction.editReply({
+        content: `<@&${LEAGUES_PING_ROLE_ID}>`,
+        embeds:  [embed],
       });
 
-      // Create private thread attached to the league message
+      // Create a true private thread on the channel (not attached to the message)
       let thread = null;
       try {
-        thread = await msg.startThread({
+        thread = await interaction.channel.threads.create({
           name:                `League ${leagueId} | ${FORMAT_LABEL[format]} ${TYPE_LABEL[type]}`,
-          autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
           type:                ChannelType.PrivateThread,
-          reason:              `League ${leagueId} thread`,
+          autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
+          invitable:           false,
+          reason:              `Private thread for league ${leagueId}`,
         });
 
         await thread.members.add(interaction.user.id);
@@ -289,16 +291,8 @@ client.on('interactionCreate', async interaction => {
             `This private thread is for league \`${leagueId}\`. Players who join the league will be added here automatically.`
           )
           .addFields(
-            {
-              name:  'Join Command',
-              value: `\`/league join id:${leagueId}\``,
-              inline: false,
-            },
-            {
-              name:  'Cancel Command',
-              value: `\`/league cancel id:${leagueId}\``,
-              inline: false,
-            },
+            { name: 'Join Command',   value: `\`/league join id:${leagueId}\``,   inline: false },
+            { name: 'Cancel Command', value: `\`/league cancel id:${leagueId}\``, inline: false },
           )
           .setTimestamp();
 
@@ -310,7 +304,7 @@ client.on('interactionCreate', async interaction => {
         console.error('[THREAD] Failed to create private thread:', err.message);
       }
 
-      // Persist message and thread IDs
+      // Persist IDs
       const dbUpd = loadDB();
       dbUpd.leagues[leagueId].message_id = msg.id;
       dbUpd.leagues[leagueId].thread_id  = thread ? thread.id : null;
@@ -337,26 +331,22 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: 'You have already joined this league.', ephemeral: true });
       }
 
+      // Defer so async work doesn't expire the interaction
+      await interaction.deferReply({ ephemeral: true });
+
       league.players.push(interaction.user.id);
-
-      if (league.players.length >= league.max_players) {
-        league.status = 'full';
-      }
-
+      if (league.players.length >= league.max_players) league.status = 'full';
       saveDB(db);
 
-      // Add member to the private thread
+      // Add to private thread
       if (league.thread_id) {
         try {
           const thread = await interaction.guild.channels.fetch(league.thread_id);
           if (thread) {
             await thread.members.add(interaction.user.id);
             await thread.send({ content: `<@${interaction.user.id}> has joined the league.` });
-
             if (league.status === 'full') {
-              await thread.send({
-                content: 'The league is now full. All players have been added to this thread. Good luck.',
-              });
+              await thread.send({ content: 'The league is now full. All players have been added. Good luck.' });
             }
           }
         } catch (err) {
@@ -364,22 +354,19 @@ client.on('interactionCreate', async interaction => {
         }
       }
 
-      // Refresh the embed in the league channel
+      // Update the public embed
       try {
         const leagueChannel = await interaction.guild.channels.fetch(LEAGUE_CHANNEL_ID);
         if (leagueChannel && league.message_id) {
           const msg = await leagueChannel.messages.fetch(league.message_id);
-          if (msg) {
-            await msg.edit({ embeds: [buildLeagueEmbed(league, interaction.guild)] });
-          }
+          if (msg) await msg.edit({ embeds: [buildLeagueEmbed(league, interaction.guild)] });
         }
       } catch (err) {
         console.error('[EMBED] Failed to update league embed:', err.message);
       }
 
-      return interaction.reply({
-        content:   `You have joined league \`${leagueId}\`. You have been added to the private league thread.`,
-        ephemeral: true,
+      return interaction.editReply({
+        content: `You have joined league \`${leagueId}\`. You have been added to the private league thread.`,
       });
     }
 
@@ -407,10 +394,13 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: 'This league is already cancelled.', ephemeral: true });
       }
 
+      // Defer before async work
+      await interaction.deferReply({ ephemeral: true });
+
       league.status = 'cancelled';
       saveDB(db);
 
-      // Update the embed
+      // Update the public embed
       try {
         const leagueChannel = await interaction.guild.channels.fetch(LEAGUE_CHANNEL_ID);
         if (leagueChannel && league.message_id) {
@@ -419,16 +409,13 @@ client.on('interactionCreate', async interaction => {
             const cancelEmbed = new EmbedBuilder()
               .setTitle('League Cancelled')
               .setColor(0x8b0000)
-              .setDescription(
-                `League \`${leagueId}\` has been cancelled by <@${interaction.user.id}>.`
-              )
+              .setDescription(`League \`${leagueId}\` has been cancelled by <@${interaction.user.id}>.`)
               .addFields(
                 { name: 'Format',     value: FORMAT_LABEL[league.format],  inline: true },
                 { name: 'Match Type', value: TYPE_LABEL[league.type],      inline: true },
                 { name: 'Region',     value: REGION_LABEL[league.region],  inline: true },
               )
               .setTimestamp();
-
             await msg.edit({ content: '', embeds: [cancelEmbed] });
           }
         }
@@ -436,7 +423,7 @@ client.on('interactionCreate', async interaction => {
         console.error('[EMBED] Failed to update cancelled embed:', err.message);
       }
 
-      // Archive thread
+      // Archive the private thread
       if (league.thread_id) {
         try {
           const thread = await interaction.guild.channels.fetch(league.thread_id);
@@ -451,10 +438,7 @@ client.on('interactionCreate', async interaction => {
         }
       }
 
-      return interaction.reply({
-        content:   `League \`${leagueId}\` has been cancelled.`,
-        ephemeral: true,
-      });
+      return interaction.editReply({ content: `League \`${leagueId}\` has been cancelled.` });
     }
   }
 
