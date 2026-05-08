@@ -135,7 +135,7 @@ function buildEventButtons(eventId) {
   );
 }
 
-// ─── Slash Commands ────────────────────────────────────────────────────────[...]
+// ─── Slash Commands ───────────────────────────────────────────────────────[...]
 const commands = [
   new SlashCommandBuilder()
     .setName('league')
@@ -204,7 +204,7 @@ const commands = [
     .addUserOption(opt => opt.setName('user').setDescription('User to clear warns for').setRequired(true)),
 ];
 
-// ─── Client ──────────────────────────────────────────────────────────[...]
+// ─── Client ────────────────────────────────────────────────────────────[...]
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -550,22 +550,19 @@ client.on('interactionCreate', async interaction => {
 
     const embeds = [
       new EmbedBuilder().setTitle('Section I: The FCD Code of Conduct').setColor(0x1a1a2e)
-        .setDescription(
-          'Our goal is to build the best MVSD community on Discord. This requires everyone to act with common sense and basic decency. Any behavior that ruins the fun for others — whether through sa[...]
-          '**External Links:**\nhttps://discord.com/terms\nhttps://discord.com/guidelines'
-        ),
+        .setDescription('Our goal is to build the best MVSD community on Discord. This requires everyone to act with common sense and basic decency. Any behavior that ruins the fun for others is not tolerated. **External Links:** https://discord.com/terms https://discord.com/guidelines'),
       new EmbedBuilder().setTitle('Section II: Respect & Interaction').setColor(0x1a1a2e)
-        .setDescription('» **Keep it Civil:** We do not care how good you are at the game; if you are toxic, you are out. This includes any form of racism, slurs, or bullying. Trash talk is part of t[...]
+        .setDescription('» **Keep it Civil:** We do not care how good you are at the game; if you are toxic, you are out. This includes any form of racism, slurs, or bullying. Trash talk is part of competitive gaming, but only when it stays respectful.'),
       new EmbedBuilder().setTitle('Section III: Privacy & Safety First').setColor(0x1a1a2e)
-        .setDescription('» **No Leaks:** Your online life stays online. Attempting to find or share anyone\'s real-world name, location, or private photos (doxing) is the fastest way to get banned. W[...]
+        .setDescription('» **No Leaks:** Your online life stays online. Attempting to find or share anyone\'s real-world name, location, or private photos (doxing) is the fastest way to get banned. We take privacy seriously.'),
       new EmbedBuilder().setTitle('Section IV: Server Cleanliness').setColor(0x1a1a2e)
-        .setDescription('» **Keep it SFW:** We are a gaming community, not a place for adult content. Posting NSFW images, links, or having overly graphic conversations is strictly prohibited. If you[...]
+        .setDescription('» **Keep it SFW:** We are a gaming community, not a place for adult content. Posting NSFW images, links, or having overly graphic conversations is strictly prohibited.'),
       new EmbedBuilder().setTitle('Section V: Promotion & Scams').setColor(0x1a1a2e)
-        .setDescription('» **No Unauthorized Ads:** Do not join just to DM our members your own server links or cheap gem scams. We consider this predatory. If you want to partner with FCD, go throug[...]
+        .setDescription('» **No Unauthorized Ads:** Do not join just to DM our members your own server links or cheap gem scams. We consider this predatory. If you want to partner with FCD, contact leadership.'),
       new EmbedBuilder().setTitle('Section VI: Leadership & Disputes').setColor(0x1a1a2e)
-        .setDescription('» **Staff Decisions:** Our moderators are here to keep the server running. Their word is final in any dispute. If you disagree with a warn or a mute, take it to a private tic[...]
+        .setDescription('» **Staff Decisions:** Our moderators are here to keep the server running. Their word is final in any dispute. If you disagree with a warn or mute, take it to a private ticket.'),
       new EmbedBuilder().setTitle('Section VII: Your Account, Your Risk').setColor(0x1a1a2e)
-        .setDescription('» **No Excuses:** You are the only person who should have access to your account. If your friend gets you banned while on your computer, the ban stays. Additionally, using al[...]
+        .setDescription('» **No Excuses:** You are the only person who should have access to your account. If your friend gets you banned while on your computer, the ban stays. No account sharing allowed.'),
     ];
 
     try { await channel.bulkDelete(100); } catch { /* messages may be too old */ }
@@ -632,7 +629,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ content: 'League information posted successfully.' });
   }
 
-  // ── /hostevent ─────────────────────────────────────────────────────────────[...]
+  // ── /hostevent ─────────────────────────────────────────────────────────[...]
   if (commandName === 'hostevent') {
     if (!interaction.member.roles.cache.has(HEAD_OF_EVENTS_ROLE_ID)) {
       return interaction.reply({ content: 'You do not have the required role to host events.', ephemeral: true });
@@ -837,7 +834,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // ── /endevent ──────────────────────────────────────────────────────────────[...]
+  // ── /endevent ────────────────────────────────────────────────────────────[...]
   if (commandName === 'endevent') {
     const eventId = interaction.options.getString('id').trim().toUpperCase();
     const db      = loadDB();
@@ -909,7 +906,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ content: `Event \`${eventId}\` has been ended and general chat has been unlocked.` });
   }
 
-  // ── /warns ─────────────────────────────────────────────────────────────────[...]
+  // ── /warns ───────────────────────────────────────────────────────────────[...]
   if (commandName === 'warns') {
     const target   = interaction.options.getUser('user') ?? interaction.user;
     const db       = loadDB();
@@ -930,7 +927,7 @@ client.on('interactionCreate', async interaction => {
     });
   }
 
-  // ── /clearwarns ────────────────────────────────────────────────────────────[...]
+  // ── /clearwarns ─────────────────────────────────────────────────────────[...]
   if (commandName === 'clearwarns') {
     const target = interaction.options.getUser('user');
     const db     = loadDB();
