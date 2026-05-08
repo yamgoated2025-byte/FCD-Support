@@ -102,7 +102,7 @@ function buildLeagueEmbed(league, guild) {
     .setTimestamp();
 }
 
-function buildLeagueButtons(leagueId, isHost) {
+function buildLeagueButtons(leagueId, leagueHostId) {
   const buttons = [
     new ButtonBuilder()
       .setCustomId(`league_join_${leagueId}`)
@@ -110,7 +110,7 @@ function buildLeagueButtons(leagueId, isHost) {
       .setStyle(ButtonStyle.Success),
   ];
 
-  if (isHost) {
+  if (leagueHostId) {
     buttons.push(
       new ButtonBuilder()
         .setCustomId(`league_cancel_${leagueId}`)
@@ -285,10 +285,9 @@ client.on('interactionCreate', async interaction => {
           if (leagueChannel && league.message_id) {
             const msg = await leagueChannel.messages.fetch(league.message_id);
             if (msg) {
-              const isHost = interaction.user.id === league.host_id;
               await msg.edit({
                 embeds: [buildLeagueEmbed(league, interaction.guild)],
-                components: [buildLeagueButtons(id, isHost)],
+                components: [buildLeagueButtons(id, league.host_id)],
               });
             }
           }
@@ -501,7 +500,7 @@ client.on('interactionCreate', async interaction => {
     const msg = await interaction.editReply({
       content: `<@&${LEAGUES_PING_ROLE_ID}>`,
       embeds:  [buildLeagueEmbed(league, interaction.guild)],
-      components: [buildLeagueButtons(leagueId, true)],
+      components: [buildLeagueButtons(leagueId, league.host_id)],
     });
 
     let thread = null;
