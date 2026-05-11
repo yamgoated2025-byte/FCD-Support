@@ -160,6 +160,11 @@ const commands = [
     .addStringOption(opt => opt.setName('id').setDescription('League ID').setRequired(true)),
 
   new SlashCommandBuilder()
+    .setName('pingleagues')
+    .setDescription('Ping the leagues role')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
     .setName('guidelines')
     .setDescription('Post server guidelines in the guidelines channel')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -506,6 +511,7 @@ client.on('interactionCreate', async interaction => {
       content: `<@&${LEAGUES_PING_ROLE_ID}>`,
       embeds:  [buildLeagueEmbed(league, interaction.guild)],
       components: [buildLeagueButtons(leagueId, league.host_id)],
+      allowedMentions: { roles: [LEAGUES_PING_ROLE_ID] },
     });
 
     let thread = null;
@@ -605,6 +611,25 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ content: `League \`${leagueId}\` has been cancelled successfully.` });
   }
 
+  // ── /pingleagues ────────────────────────────────────────────────────────
+  if (commandName === 'pingleagues') {
+    if (!interaction.member.roles.cache.has(LEAGUE_HOST_ROLE_ID) && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
+    }
+    if (interaction.channelId !== LEAGUE_CHANNEL_ID) {
+      return interaction.reply({ content: `This command can only be used in <#${LEAGUE_CHANNEL_ID}>.`, ephemeral: true });
+    }
+
+    await interaction.deferReply();
+
+    await interaction.editReply({
+      content: `<@&${LEAGUES_PING_ROLE_ID}>`,
+      allowedMentions: { roles: [LEAGUES_PING_ROLE_ID] },
+    });
+
+    return;
+  }
+
   // ── /guidelines ──────────────────────────────────────────────────────────
   if (commandName === 'guidelines') {
     await interaction.deferReply({ ephemeral: true });
@@ -683,7 +708,8 @@ client.on('interactionCreate', async interaction => {
         .setColor(0x1a1a2e)
         .setDescription(
           'Use `/league` to host a league.\n\n' +
-          'To cancel a league, use `/leaguecancel id:<league_id>` or click the "Cancel League" button in the main channel.'
+          'To cancel a league, use `/leaguecancel id:<league_id>` or click the "Cancel League" button in the main channel.\n\n' +
+          'Use `/pingleagues` to ping the leagues role (League Hosts and Admins only).'
         ),
     ];
 
@@ -1006,21 +1032,6 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
   if (!message.guild)     return;
-
-  // ── ,pingleagues prefix command ──────────────────────────────────────────
-  if (message.content.trim().toLowerCase() === ',pingleagues') {
-    if (!message.member.roles.cache.has(LEAGUE_HOST_ROLE_ID)) {
-      const warn = await message.reply({ content: 'You do not have permission to use this command.' });
-      setTimeout(() => warn.delete().catch(() => {}), 5000);
-      return;
-    }
-    await message.delete().catch(() => {});
-    await message.channel.send({
-      content: `<@&${LEAGUES_PING_ROLE_ID}>`,
-      allowedMentions: { roles: [LEAGUES_PING_ROLE_ID] },
-    });
-    return;
-  }
 
   // ── Event guess detection ────────────────────────────────────────────────
   if (message.channelId === GENERAL_CHAT_ID) {
