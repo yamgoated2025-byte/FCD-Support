@@ -16,7 +16,7 @@ const {
 const fs   = require('fs');
 const path = require('path');
 
-// ─── Config ────────────────────────────────────────────────────────────[...]
+// ─── Config ──────────────────────────────────────────────────────────────
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID  = process.env.GUILD_ID;
@@ -34,7 +34,7 @@ const LEAGUE_HOST_ROLE_ID    = '1494366881916653690';
 const HEAD_OF_EVENTS_ROLE_ID = '1495436092470460596';
 const GIVEAWAY_PING_ROLE_ID  = '1494342597840474193';
 
-// ─── Database ───────────────────────────────────────────────────────────[...]
+// ─── Database ──────────────────────────────────────────────────────────────
 const DB_PATH = path.join(__dirname, 'database.json');
 
 function loadDB() {
@@ -56,7 +56,7 @@ function saveDB(db) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────[...]
+// ─── Helpers ──────────────────────────────────────────────────────────────
 function generateId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -135,7 +135,7 @@ function buildEventButtons(eventId) {
   );
 }
 
-// ─── Slash Commands ───────────────────────────────────────────────────────[...]
+// ─── Slash Commands ───────────────────────────────────────────────────────────
 const commands = [
   new SlashCommandBuilder()
     .setName('league')
@@ -153,6 +153,11 @@ const commands = [
         { name: 'South America', value: 'south_america' },
         { name: 'Oceania', value: 'oceania' },
       )),
+
+  new SlashCommandBuilder()
+    .setName('leaguecancel')
+    .setDescription('Cancel an active league')
+    .addStringOption(opt => opt.setName('id').setDescription('League ID').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('guidelines')
@@ -204,7 +209,7 @@ const commands = [
     .addUserOption(opt => opt.setName('user').setDescription('User to clear warns for').setRequired(true)),
 ];
 
-// ─── Client ────────────────────────────────────────────────────────────[...]
+// ─── Client ──────────────────────────────────────────────────────────────
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -215,7 +220,7 @@ const client = new Client({
   ],
 });
 
-// ─── Ready ──────────────────────────────────────────────────────────[...]
+// ─── Ready ──────────────────────────────────────────────────────────────
 client.once('clientReady', async () => {
   console.log(`[BOT] Logged in as ${client.user.tag}`);
   if (!CLIENT_ID || !GUILD_ID) {
@@ -231,7 +236,7 @@ client.once('clientReady', async () => {
   }
 });
 
-// ─── Interactions ──────────────────────────────────────────────────────[...]
+// ─── Interactions ──────────────────────────────────────────────────────────
 client.on('interactionCreate', async interaction => {
 
   // ── Button Interactions ───────────────────────────────────────────────────
@@ -363,7 +368,7 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: 'Only the event host can use these buttons.', ephemeral: true });
       }
 
-      // ── Start ──────────────────────────────────────────────────────────[...]
+      // ── Start ─────────────────────────────────────────────────────────────
       if (action === 'start') {
         if (event.status !== 'pending') {
           return interaction.reply({ content: 'This event has already been started or cancelled.', ephemeral: true });
@@ -440,7 +445,7 @@ client.on('interactionCreate', async interaction => {
         return;
       }
 
-      // ── Cancel ──────────────────────────────────────────────────────────[...]
+      // ── Cancel ────────────────────────────────────────────────────────────
       if (action === 'cancel') {
         if (event.status !== 'pending') {
           return interaction.reply({ content: 'This event has already been started or cancelled.', ephemeral: true });
@@ -467,7 +472,7 @@ client.on('interactionCreate', async interaction => {
 
   const { commandName } = interaction;
 
-  // ── /league ────────────────────────────────────────────────────────────[...]
+  // ── /league ──────────────────────────────────────────────────────────────
   if (commandName === 'league') {
     if (!interaction.member.roles.cache.has(LEAGUE_HOST_ROLE_ID)) {
       return interaction.reply({ content: 'You do not have the required role to host leagues.', ephemeral: true });
@@ -540,7 +545,67 @@ client.on('interactionCreate', async interaction => {
     return;
   }
 
-  // ── /guidelines ────────────────────────────────────────────────────────────[...]
+  // ── /leaguecancel ────────────────────────────────────────────────────────
+  if (commandName === 'leaguecancel') {
+    const leagueId = interaction.options.getString('id').trim().toUpperCase();
+    const db       = loadDB();
+    const league   = db.leagues[leagueId];
+
+    if (!league) {
+      return interaction.reply({ content: 'League not found.', ephemeral: true });
+    }
+    if (interaction.user.id !== league.host_id) {
+      return interaction.reply({ content: 'Only the league host can cancel this league.', ephemeral: true });
+    }
+    if (league.status === 'cancelled') {
+      return interaction.reply({ content: 'This league is already cancelled.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    league.status = 'cancelled';
+    saveDB(db);
+
+    try {
+      const leagueChannel = await interaction.guild.channels.fetch(LEAGUE_CHANNEL_ID);
+      if (leagueChannel && league.message_id) {
+        const msg = await leagueChannel.messages.fetch(league.message_id);
+        if (msg) {
+          const cancelEmbed = new EmbedBuilder()
+            .setTitle('League Cancelled')
+            .setColor(0x8b0000)
+            .setDescription(`League \`${leagueId}\` has been cancelled by <@${interaction.user.id}>.`)
+            .addFields(
+              { name: 'Format',     value: FORMAT_LABEL[league.format],  inline: true },
+              { name: 'Match Type', value: TYPE_LABEL[league.type],      inline: true },
+              { name: 'Region',     value: REGION_LABEL[league.region],  inline: true },
+            )
+            .setTimestamp();
+          await msg.edit({ content: '', embeds: [cancelEmbed], components: [] });
+        }
+      }
+    } catch (err) {
+      console.error('[EMBED] Failed to update cancelled embed:', err.message);
+    }
+
+    if (league.thread_id) {
+      try {
+        const thread = await interaction.guild.channels.fetch(league.thread_id);
+        if (thread) {
+          await thread.send({
+            content: `This league has been cancelled by <@${interaction.user.id}>. The thread will now be archived.`,
+          });
+          await thread.setArchived(true);
+        }
+      } catch (err) {
+        console.error('[THREAD] Failed to archive thread:', err.message);
+      }
+    }
+
+    return interaction.editReply({ content: `League \`${leagueId}\` has been cancelled successfully.` });
+  }
+
+  // ── /guidelines ──────────────────────────────────────────────────────────
   if (commandName === 'guidelines') {
     await interaction.deferReply({ ephemeral: true });
 
@@ -549,19 +614,19 @@ client.on('interactionCreate', async interaction => {
 
     const embeds = [
       new EmbedBuilder().setTitle('Section I: The FCD Code of Conduct').setColor(0x1a1a2e)
-        .setDescription('Our goal is to build the best MVSD community on Discord. This requires everyone to act with common sense and basic decency. Any behavior that ruins the fun for others is not tolerated. **External Links:** https://discord.com/terms https://discord.com/guidelines'),
+        .setDescription('Our goal is to build the best MVSD community on Discord. This requires everyone to act with common sense and basic decency. Any behavior that ruins the fun for others is prohibited.'),
       new EmbedBuilder().setTitle('Section II: Respect & Interaction').setColor(0x1a1a2e)
-        .setDescription('» **Keep it Civil:** We do not care how good you are at the game; if you are toxic, you are out. This includes any form of racism, slurs, or bullying. Trash talk is part of competitive gaming, but only when it stays respectful.'),
+        .setDescription('» **Keep it Civil:** We do not care how good you are at the game; if you are toxic, you are out. This includes any form of racism, slurs, or bullying. Trash talk is part of competition but harassment is not.'),
       new EmbedBuilder().setTitle('Section III: Privacy & Safety First').setColor(0x1a1a2e)
-        .setDescription('» **No Leaks:** Your online life stays online. Attempting to find or share anyone\'s real-world name, location, or private photos (doxing) is the fastest way to get banned. We take privacy seriously.'),
+        .setDescription('» **No Leaks:** Your online life stays online. Attempting to find or share anyone\'s real-world name, location, or private photos (doxing) is the fastest way to get banned.'),
       new EmbedBuilder().setTitle('Section IV: Server Cleanliness').setColor(0x1a1a2e)
         .setDescription('» **Keep it SFW:** We are a gaming community, not a place for adult content. Posting NSFW images, links, or having overly graphic conversations is strictly prohibited.'),
       new EmbedBuilder().setTitle('Section V: Promotion & Scams').setColor(0x1a1a2e)
         .setDescription('» **No Unauthorized Ads:** Do not join just to DM our members your own server links or cheap gem scams. We consider this predatory. If you want to partner with FCD, contact leadership.'),
       new EmbedBuilder().setTitle('Section VI: Leadership & Disputes').setColor(0x1a1a2e)
-        .setDescription('» **Staff Decisions:** Our moderators are here to keep the server running. Their word is final in any dispute. If you disagree with a warn or mute, take it to a private ticket.'),
+        .setDescription('» **Staff Decisions:** Our moderators are here to keep the server running. Their word is final in any dispute. If you disagree with a warn or mute, take it to a private conversation.'),
       new EmbedBuilder().setTitle('Section VII: Your Account, Your Risk').setColor(0x1a1a2e)
-        .setDescription('» **No Excuses:** You are the only person who should have access to your account. If your friend gets you banned while on your computer, the ban stays. No account sharing allowed.'),
+        .setDescription('» **No Excuses:** You are the only person who should have access to your account. If your friend gets you banned while on your computer, the ban stays. No account sharing.'),
     ];
 
     try { await channel.bulkDelete(100); } catch { /* messages may be too old */ }
@@ -570,7 +635,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ content: 'Guidelines posted successfully.' });
   }
 
-  // ── /leagueinfo ────────────────────────────────────────────────────────────[...]
+  // ── /leagueinfo ──────────────────────────────────────────────────────────
   if (commandName === 'leagueinfo') {
     await interaction.deferReply({ ephemeral: true });
 
@@ -618,7 +683,7 @@ client.on('interactionCreate', async interaction => {
         .setColor(0x1a1a2e)
         .setDescription(
           'Use `/league` to host a league.\n\n' +
-          'To end a league, click the "Cancel League" button in the main channel.'
+          'To cancel a league, use `/leaguecancel id:<league_id>` or click the "Cancel League" button in the main channel.'
         ),
     ];
 
@@ -628,7 +693,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ content: 'League information posted successfully.' });
   }
 
-  // ── /hostevent ─────────────────────────────────────────────────────────[...]
+  // ── /hostevent ───────────────────────────────────────────────────────────
   if (commandName === 'hostevent') {
     if (!interaction.member.roles.cache.has(HEAD_OF_EVENTS_ROLE_ID)) {
       return interaction.reply({ content: 'You do not have the required role to host events.', ephemeral: true });
@@ -716,7 +781,7 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
-    // ── Roblox Event ────────────────────────────────────────────────────────
+    // ── Roblox Event ─────────────────────────────────────────────────────────
     if (sub === 'roblox') {
       const host       = interaction.options.getString('host');
       const funder     = interaction.options.getString('funder');
@@ -773,7 +838,7 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
-    // ── Custom Event ────────────────────────────────────────────────────────
+    // ── Custom Event ─────────────────────────────────────────────────────────
     if (sub === 'custom') {
       const name       = interaction.options.getString('name');
       const howitworks = interaction.options.getString('howitworks');
@@ -833,7 +898,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // ── /endevent ────────────────────────────────────────────────────────────[...]
+  // ── /endevent ────────────────────────────────────────────────────────────
   if (commandName === 'endevent') {
     const eventId = interaction.options.getString('id').trim().toUpperCase();
     const db      = loadDB();
@@ -905,7 +970,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ content: `Event \`${eventId}\` has been ended and general chat has been unlocked.` });
   }
 
-  // ── /warns ───────────────────────────────────────────────────────────────[...]
+  // ── /warns ───────────────────────────────────────────────────────────────
   if (commandName === 'warns') {
     const target   = interaction.options.getUser('user') ?? interaction.user;
     const db       = loadDB();
@@ -926,7 +991,7 @@ client.on('interactionCreate', async interaction => {
     });
   }
 
-  // ── /clearwarns ─────────────────────────────────────────────────────────[...]
+  // ── /clearwarns ──────────────────────────────────────────────────────────
   if (commandName === 'clearwarns') {
     const target = interaction.options.getUser('user');
     const db     = loadDB();
@@ -936,13 +1001,13 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ─── Message Handler ───────────────────────────────────────────────────────[...]
+// ─── Message Handler ────────────────────────────────────────────────────────
 
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
   if (!message.guild)     return;
 
-  // ── ,pingleagues prefix command ───────────────────────────────────────────
+  // ── ,pingleagues prefix command ──────────────────────────────────────────
   if (message.content.trim().toLowerCase() === ',pingleagues') {
     if (!message.member.roles.cache.has(LEAGUE_HOST_ROLE_ID)) {
       const warn = await message.reply({ content: 'You do not have permission to use this command.' });
@@ -957,7 +1022,7 @@ client.on('messageCreate', async message => {
     return;
   }
 
-  // ── Event guess detection ─────────────────────────────────────────────────
+  // ── Event guess detection ────────────────────────────────────────────────
   if (message.channelId === GENERAL_CHAT_ID) {
     const db          = loadDB();
     const activeEvent = Object.values(db.events).find(e => e.status === 'active');
@@ -1014,7 +1079,7 @@ client.on('messageCreate', async message => {
 
 });
 
-// ─── Boot ──────────────────────────────────────────────────────────────[...]
+// ─── Boot ───────────────────────────────────────────────────────────────────
 if (!TOKEN) {
   console.error('[BOT] DISCORD_TOKEN is not set. Please add it as an environment variable.');
   process.exit(1);
